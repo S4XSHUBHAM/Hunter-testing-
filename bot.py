@@ -1,90 +1,61 @@
 import os
 import asyncio
 from telegram import Update
-from telegram.ext import (
-    ApplicationBuilder,
-    ContextTypes,
-    MessageHandler,
-    filters,
-)
+from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
 from playwright.async_api import async_playwright
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN")  # Render ENV me set karo
-
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 TARGET_LINK = "https://huntermods.in/Getkey.php"
 
-
-async def generate_vplink():
+async def get_vplink_url():
     try:
         async with async_playwright() as p:
+            # Browser launch
             browser = await p.chromium.launch(
-                headless=True,  # Render ke liye TRUE (limitation)
-                args=[
-                    "--no-sandbox",
-                    "--disable-dev-shm-usage",
-                    "--disable-blink-features=AutomationControlled"
-                ]
+                headless=True,
+                args=["--no-sandbox", "--disable-dev-shm-usage"]
             )
-
-            context = await browser.new_context(
-                user_agent=(
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/120.0.0.0 Safari/537.36"
-                )
-            )
-
-            page = await context.new_page()
+            
+            page = await browser.new_page()
+            
+            # 1. HunterMods page par jao
             await page.goto(TARGET_LINK, timeout=60000)
-
-            # button wait + click
-            await page.wait_for_selector("button", timeout=15000)
-            await page.click("button")
-
-            # redirect ka wait
-            await page.wait_for_timeout(8000)
-
+            
+            # 2. Button click karo - exact text match
+            await page.click("button:has-text('GENERATE INSTANT KEY')")
+            
+            # 3. Redirect hone do (VPLink par pahunchne tak)
+            await page.wait_for_timeout(8000)  # 8 second wait
+            
+            # 4. Final URL lo
             final_url = page.url
             await browser.close()
-
-            if "vplink" in final_url.lower():
-                return final_url
-            else:
-                return None
-
+            
+            # 5. Sirf URL return karo, koi condition nahi
+            return final_url
+            
     except Exception as e:
-        print("Playwright error:", e)
+        print(f"Error: {e}")
         return None
-
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
-
+    
     if TARGET_LINK in text:
-        msg = await update.message.reply_text("🔄 Generating link, please wait...")
-
-        link = await generate_vplink()
-
-        if link:
-            await msg.edit_text(f"✅ Your link:\n{link}")
+        msg = await update.message.reply_text("🔄 Generating link...")
+        
+        vplink_url = await get_vplink_url()
+        
+        if vplink_url:
+            await msg.edit_text(f"✅ Your link:\n{vplink_url}")
         else:
-            await msg.edit_text(
-                "❌ Error generating link\n\n"
-                "⚠️ Note: Render / headless environment me "
-                "HunterMods bypass block hota hai."
-            )
-
+            await msg.edit_text("❌ Failed to generate link. Try again.")
 
 async def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
-
-    app.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
-    )
-
-    print("Bot started...")
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    print("Bot is running...")
     await app.run_polling()
-
 
 if __name__ == "__main__":
     asyncio.run(main())
