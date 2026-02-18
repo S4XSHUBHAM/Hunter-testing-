@@ -1,15 +1,20 @@
-import os
+import asyncio
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from playwright.sync_api import sync_playwright
+from telegram.ext import (
+    ApplicationBuilder,
+    MessageHandler,
+    ContextTypes,
+    filters,
+)
+from playwright.async_api import async_playwright
 
-# Render ENV variable se token lo (secure)
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
+TOKEN = "8563186624:AAF-ib-iPgcWnVt6Fcgj7QsegGeUM57p3sc"
+TARGET_LINK = "https://huntermods.in/Getkey.php"
 
 
-def huntermods_bypass():
-    with sync_playwright() as p:
-        browser = p.chromium.launch(
+async def bypass_huntermods():
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
             headless=True,
             args=[
                 "--no-sandbox",
@@ -18,43 +23,34 @@ def huntermods_bypass():
             ]
         )
 
-        page = browser.new_page()
-        page.goto("https://huntermods.in/Getkey.php", timeout=60000)
+        page = await browser.new_page()
+        await page.goto(TARGET_LINK, timeout=60000)
 
-        page.wait_for_selector("text=Generate Key", timeout=15000)
-        page.click("text=Generate Key")
+        await page.wait_for_selector("text=Generate Key", timeout=20000)
+        await page.click("text=Generate Key")
 
-        page.wait_for_timeout(4000)
+        await page.wait_for_timeout(4000)
 
         vplink = page.url
-        browser.close()
+        await browser.close()
         return vplink
 
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "👋 Welcome!\n\n"
-        "🔑 Key generate karne ke liye command use karo:\n"
-        "/key"
-    )
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
 
-
-async def key_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = await update.message.reply_text("⏳ Generate ho rahi hai, wait karo...")
-
-    try:
-        link = huntermods_bypass()
-        await msg.edit_text(f"✅ **VPLINK FOUND**\n\n{link}", parse_mode="Markdown")
-    except Exception as e:
-        await msg.edit_text(f"❌ Error:\n{e}")
+    if TARGET_LINK in text:
+        msg = await update.message.reply_text("⏳ Processing...")
+        try:
+            vplink = await bypass_huntermods()
+            await msg.edit_text(vplink)
+        except Exception as e:
+            await msg.edit_text("❌ Error generating link")
 
 
 def main():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("key", key_command))
-
-    print("🤖 Bot running on Render...")
+    app = ApplicationBuilder().token(TOKEN).build()
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.run_polling()
 
 
