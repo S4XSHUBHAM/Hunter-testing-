@@ -1,56 +1,63 @@
 import asyncio
 from telegram import Update
-from telegram.ext import (
-    ApplicationBuilder,
-    MessageHandler,
-    ContextTypes,
-    filters,
-)
+from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 from playwright.async_api import async_playwright
 
 TOKEN = "8563186624:AAF-ib-iPgcWnVt6Fcgj7QsegGeUM57p3sc"
-TARGET_LINK = "https://huntermods.in/Getkey.php"
+TARGET = "https://huntermods.in/Getkey.php"
 
 
 async def bypass_huntermods():
     async with async_playwright() as p:
         browser = await p.chromium.launch(
             headless=True,
-            args=[
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-blink-features=AutomationControlled"
-            ]
+            args=["--no-sandbox", "--disable-dev-shm-usage"]
         )
-
         page = await browser.new_page()
-        await page.goto(TARGET_LINK, timeout=60000)
 
-        await page.wait_for_selector("text=Generate Key", timeout=20000)
-        await page.click("text=Generate Key")
+        vplink = None
 
-        await page.wait_for_timeout(4000)
+        async def handle_response(response):
+            nonlocal vplink
+            url = response.url
+            if "vplink" in url or "vplinks" in url:
+                vplink = url
 
-        vplink = page.url
+        page.on("response", handle_response)
+
+        await page.goto(TARGET, timeout=60000)
+        await page.wait_for_timeout(5000)
+
+        # try clicking button if exists
+        try:
+            await page.click("button", timeout=3000)
+            await page.wait_for_timeout(5000)
+        except:
+            pass
+
         await browser.close()
+
+        if not vplink:
+            raise Exception("VPlink not found")
+
         return vplink
 
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
 
-    if TARGET_LINK in text:
+    if TARGET in text:
         msg = await update.message.reply_text("⏳ Processing...")
         try:
-            vplink = await bypass_huntermods()
-            await msg.edit_text(vplink)
+            link = await bypass_huntermods()
+            await msg.edit_text(link)
         except Exception as e:
             await msg.edit_text("❌ Error generating link")
 
 
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handler))
     app.run_polling()
 
 
