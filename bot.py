@@ -8,29 +8,51 @@ BOT_TOKEN = "8563186624:AAE0ugYSB5CYDnQ51cAQGOgnpKaSDO0olA8"
 TARGET_LINK = "https://huntermods.in/Getkey.php"
 
 async def capture_url_after_click():
+    print("=" * 50)
+    print("DEBUG: Function started")
+    
     try:
         async with async_playwright() as p:
+            print("DEBUG: Playwright started")
+            
             # Browser launch
             browser = await p.chromium.launch(
                 headless=True,
                 args=["--no-sandbox", "--disable-dev-shm-usage"]
             )
+            print("DEBUG: Browser launched")
             
             page = await browser.new_page()
+            print("DEBUG: New page created")
             
-            print("🔍 Opening HunterMods page...")
+            # Go to page
+            print(f"DEBUG: Navigating to {TARGET_LINK}")
             await page.goto(TARGET_LINK, timeout=60000)
+            print(f"DEBUG: Page loaded, current URL: {page.url}")
             
-            # Page load complete hone do
-            await page.wait_for_load_state("networkidle")
+            # Get page title
+            title = await page.title()
+            print(f"DEBUG: Page title: {title}")
             
-            # Button click karo
-            print("🖱️ Clicking GENERATE INSTANT KEY button...")
+            # Check if page loaded properly
+            content = await page.content()
+            print(f"DEBUG: Page content length: {len(content)} characters")
             
-            # Multiple selectors try karo
+            # Find all buttons
+            buttons = await page.locator("button").all()
+            print(f"DEBUG: Total buttons found: {len(buttons)}")
+            
+            for i, button in enumerate(buttons):
+                text = await button.text_content()
+                print(f"DEBUG: Button {i+1} text: '{text}'")
+            
+            # Try to click button
+            print("DEBUG: Attempting to click button...")
+            
             button_selectors = [
                 "button:has-text('GENERATE INSTANT KEY')",
                 "button:has-text('GENERATE')",
+                "button:has-text('INSTANT')",
                 "button.btn",
                 ".btn",
                 "button"
@@ -39,76 +61,105 @@ async def capture_url_after_click():
             button_clicked = False
             for selector in button_selectors:
                 try:
-                    if await page.locator(selector).count() > 0:
+                    count = await page.locator(selector).count()
+                    print(f"DEBUG: Selector '{selector}' found {count} elements")
+                    
+                    if count > 0:
                         await page.click(selector)
                         button_clicked = True
                         print(f"✅ Button clicked with selector: {selector}")
                         break
-                except:
+                except Exception as e:
+                    print(f"DEBUG: Selector '{selector}' error: {str(e)}")
                     continue
             
             if not button_clicked:
-                print("❌ No button found")
-                await browser.close()
-                return None
+                print("❌ No button could be clicked")
+                
+                # Try JavaScript click as last resort
+                print("DEBUG: Trying JavaScript click...")
+                try:
+                    await page.evaluate("""
+                        () => {
+                            const buttons = document.querySelectorAll('button');
+                            for(let btn of buttons) {
+                                if(btn.textContent.includes('GENERATE') || btn.textContent.includes('INSTANT')) {
+                                    btn.click();
+                                    return true;
+                                }
+                            }
+                            return false;
+                        }
+                    """)
+                    print("DEBUG: JavaScript click attempted")
+                    button_clicked = True
+                except Exception as e:
+                    print(f"DEBUG: JavaScript click error: {str(e)}")
             
-            # IMPORTANT: Button click ke baad jo bhi URL ho, capture karo
-            await page.wait_for_timeout(3000)  # 3 second wait for any redirect
+            # Wait and capture URL
+            print("DEBUG: Waiting 5 seconds for any redirect...")
+            await page.wait_for_timeout(5000)
             
-            # Current URL capture karo
             current_url = page.url
-            print(f"📌 URL after click: {current_url}")
+            print(f"📌 Final URL: {current_url}")
             
             await browser.close()
+            print("DEBUG: Browser closed")
             
-            # Agar URL change hua hai to return karo
-            if current_url != TARGET_LINK:
+            print("=" * 50)
+            
+            if current_url and current_url != TARGET_LINK:
+                return current_url
+            elif "vplink" in current_url.lower():
                 return current_url
             else:
+                print("DEBUG: URL didn't change or no VPLink detected")
                 return None
             
     except Exception as e:
-        print(f"❌ Error: {str(e)}")
+        print(f"❌ CRITICAL ERROR: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👋 Welcome! Send me this link:\n"
-        f"`{TARGET_LINK}`\n\n"
-        "I'll capture the URL after button click.",
+        "👋 Send me the HunterMods link!\n"
+        f"`{TARGET_LINK}`",
         parse_mode='Markdown'
     )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
+    print(f"📩 Received message: {text}")
     
     if TARGET_LINK in text:
-        msg = await update.message.reply_text("🔄 Capturing URL after button click...")
+        msg = await update.message.reply_text("🔄 Processing... Check Render logs for details.")
         
         captured_url = await capture_url_after_click()
         
         if captured_url:
-            await msg.edit_text(
-                f"✅ URL captured after click:\n`{captured_url}`",
-                parse_mode='Markdown'
-            )
+            await msg.edit_text(f"✅ Success! URL:\n`{captured_url}`", parse_mode='Markdown')
         else:
-            await msg.edit_text("❌ Failed to capture URL. No redirect occurred.")
+            await msg.edit_text(
+                "❌ Failed.\n\n"
+                "Check Render logs:\n"
+                "1. Go to Render Dashboard\n"
+                "2. Click on your service\n"
+                "3. Click 'Logs' tab\n"
+                "4. See DEBUG messages"
+            )
     else:
-        await update.message.reply_text(f"Please send the exact link: `{TARGET_LINK}`", parse_mode='Markdown')
+        await update.message.reply_text(f"Send exact link: `{TARGET_LINK}`", parse_mode='Markdown')
 
-# 🔥 IMPORTANT: Yahan main function nahi, direct run karo
 if __name__ == "__main__":
-    print("🤖 Bot starting...")
+    print("🚀 BOT STARTING WITH DEBUG MODE")
+    print(f"🤖 Token: {BOT_TOKEN[:10]}...")
+    print(f"🎯 Target: {TARGET_LINK}")
     
-    # Direct application build karo
     app = Application.builder().token(BOT_TOKEN).build()
-    
-    # Handlers add karo
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    print("✅ Bot is ready!")
-    
-    # Direct run_polling() call karo - asyncio.run() nahi
+    print("✅ Bot configured, starting polling...")
     app.run_polling()
