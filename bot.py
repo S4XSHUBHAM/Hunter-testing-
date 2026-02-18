@@ -7,7 +7,7 @@ from playwright.async_api import async_playwright
 BOT_TOKEN = "8563186624:AAE0ugYSB5CYDnQ51cAQGOgnpKaSDO0olA8"
 TARGET_LINK = "https://huntermods.in/Getkey.php"
 
-async def capture_url_on_click():
+async def capture_url_after_click():
     try:
         async with async_playwright() as p:
             # Browser launch
@@ -24,20 +24,10 @@ async def capture_url_on_click():
             # Page load complete hone do
             await page.wait_for_load_state("networkidle")
             
-            # Network requests monitor karo
-            async def handle_response(response):
-                if "vplink" in response.url.lower() or "redirect" in response.url.lower():
-                    print(f"📡 Network response URL: {response.url}")
-            
-            page.on("response", handle_response)
-            
-            # Button click se pehle ka URL
-            print(f"📌 URL before click: {page.url}")
-            
             # Button click karo
             print("🖱️ Clicking GENERATE INSTANT KEY button...")
             
-            # Button click
+            # Multiple selectors try karo
             button_selectors = [
                 "button:has-text('GENERATE INSTANT KEY')",
                 "button:has-text('GENERATE')",
@@ -46,26 +36,32 @@ async def capture_url_on_click():
                 "button"
             ]
             
+            button_clicked = False
             for selector in button_selectors:
                 try:
                     if await page.locator(selector).count() > 0:
                         await page.click(selector)
+                        button_clicked = True
                         print(f"✅ Button clicked with selector: {selector}")
                         break
                 except:
                     continue
             
-            # IMPORTANT: Button click ke turant baad URL capture
-            await page.wait_for_timeout(2000)  # 2 second wait for any immediate redirect
+            if not button_clicked:
+                print("❌ No button found")
+                await browser.close()
+                return None
             
-            # Jo bhi current URL ho, capture karo
+            # IMPORTANT: Button click ke baad jo bhi URL ho, capture karo
+            await page.wait_for_timeout(3000)  # 3 second wait for any redirect
+            
+            # Current URL capture karo
             current_url = page.url
             print(f"📌 URL after click: {current_url}")
             
-            # Browser band karo
             await browser.close()
             
-            # Agar current URL same nahi hai original se, to return karo
+            # Agar URL change hua hai to return karo
             if current_url != TARGET_LINK:
                 return current_url
             else:
@@ -89,12 +85,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if TARGET_LINK in text:
         msg = await update.message.reply_text("🔄 Capturing URL after button click...")
         
-        captured_url = await capture_url_on_click()
+        captured_url = await capture_url_after_click()
         
         if captured_url:
             await msg.edit_text(
-                f"✅ URL captured after click:\n`{captured_url}`\n\n"
-                f"🔗 Original: `{TARGET_LINK}`",
+                f"✅ URL captured after click:\n`{captured_url}`",
                 parse_mode='Markdown'
             )
         else:
@@ -102,15 +97,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(f"Please send the exact link: `{TARGET_LINK}`", parse_mode='Markdown')
 
-async def main():
+# 🔥 IMPORTANT: Yahan main function nahi, direct run karo
+if __name__ == "__main__":
+    print("🤖 Bot starting...")
+    
+    # Direct application build karo
     app = Application.builder().token(BOT_TOKEN).build()
+    
+    # Handlers add karo
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    print("🤖 Bot starting...")
     print("✅ Bot is ready!")
     
-    await app.run_polling()
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    # Direct run_polling() call karo - asyncio.run() nahi
+    app.run_polling()
