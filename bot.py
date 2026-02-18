@@ -1,84 +1,116 @@
 import os
 import asyncio
 from telegram import Update
-from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from playwright.async_api import async_playwright
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
+BOT_TOKEN = "8563186624:AAE0ugYSB5CYDnQ51cAQGOgnpKaSDO0olA8"
 TARGET_LINK = "https://huntermods.in/Getkey.php"
 
-async def get_vplink_url():
-    browser = None
+async def capture_url_on_click():
     try:
         async with async_playwright() as p:
+            # Browser launch
             browser = await p.chromium.launch(
                 headless=True,
                 args=["--no-sandbox", "--disable-dev-shm-usage"]
             )
+            
             page = await browser.new_page()
             
-            # Step 1: Go to page
-            print("Step 1: Navigating to target...")
-            response = await page.goto(TARGET_LINK, timeout=60000, wait_until='domcontentloaded')
-            print(f"Page status: {response.status if response else 'No response'}")
+            print("🔍 Opening HunterMods page...")
+            await page.goto(TARGET_LINK, timeout=60000)
             
-            # Step 2: Check page title/content
-            title = await page.title()
-            print(f"Page title: {title}")
+            # Page load complete hone do
+            await page.wait_for_load_state("networkidle")
             
-            # Step 3: Find button
-            button_exists = await page.locator("button:has-text('GENERATE INSTANT KEY')").count()
-            print(f"Button found: {button_exists > 0}")
+            # Network requests monitor karo
+            async def handle_response(response):
+                if "vplink" in response.url.lower() or "redirect" in response.url.lower():
+                    print(f"📡 Network response URL: {response.url}")
             
-            if button_exists == 0:
-                # Try alternative button selectors
-                button_exists = await page.locator("button:has-text('GENERATE')").count()
-                print(f"Alternative button found: {button_exists > 0}")
+            page.on("response", handle_response)
             
-            # Step 4: Click button
-            print("Step 4: Clicking button...")
-            await page.click("button:has-text('GENERATE INSTANT KEY')")
+            # Button click se pehle ka URL
+            print(f"📌 URL before click: {page.url}")
             
-            # Step 5: Wait for redirect
-            print("Step 5: Waiting for redirect...")
-            await page.wait_for_timeout(10000)  # 10 seconds wait
+            # Button click karo
+            print("🖱️ Clicking GENERATE INSTANT KEY button...")
             
-            # Step 6: Get URL
-            final_url = page.url
-            print(f"Step 6: Final URL = {final_url}")
+            # Button click
+            button_selectors = [
+                "button:has-text('GENERATE INSTANT KEY')",
+                "button:has-text('GENERATE')",
+                "button.btn",
+                ".btn",
+                "button"
+            ]
             
-            # Step 7: Check if redirected
-            if final_url != TARGET_LINK:
-                print("✓ Redirect successful!")
-                await browser.close()
-                return final_url
+            for selector in button_selectors:
+                try:
+                    if await page.locator(selector).count() > 0:
+                        await page.click(selector)
+                        print(f"✅ Button clicked with selector: {selector}")
+                        break
+                except:
+                    continue
+            
+            # IMPORTANT: Button click ke turant baad URL capture
+            await page.wait_for_timeout(2000)  # 2 second wait for any immediate redirect
+            
+            # Jo bhi current URL ho, capture karo
+            current_url = page.url
+            print(f"📌 URL after click: {current_url}")
+            
+            # Browser band karo
+            await browser.close()
+            
+            # Agar current URL same nahi hai original se, to return karo
+            if current_url != TARGET_LINK:
+                return current_url
             else:
-                print("✗ No redirect occurred")
-                await browser.close()
                 return None
             
     except Exception as e:
-        print(f"❌ Exception: {str(e)}")
-        if browser:
-            await browser.close()
+        print(f"❌ Error: {str(e)}")
         return None
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "👋 Welcome! Send me this link:\n"
+        f"`{TARGET_LINK}`\n\n"
+        "I'll capture the URL after button click.",
+        parse_mode='Markdown'
+    )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
-    print(f"Received message: {text}")
     
     if TARGET_LINK in text:
-        msg = await update.message.reply_text("🔄 Generating link... (checking...)")
+        msg = await update.message.reply_text("🔄 Capturing URL after button click...")
         
-        vplink_url = await get_vplink_url()
+        captured_url = await capture_url_on_click()
         
-        if vplink_url:
-            await msg.edit_text(f"✅ Your link:\n{vplink_url}")
+        if captured_url:
+            await msg.edit_text(
+                f"✅ URL captured after click:\n`{captured_url}`\n\n"
+                f"🔗 Original: `{TARGET_LINK}`",
+                parse_mode='Markdown'
+            )
         else:
-            await msg.edit_text("❌ Failed to generate link. Check Render logs for details.")
+            await msg.edit_text("❌ Failed to capture URL. No redirect occurred.")
+    else:
+        await update.message.reply_text(f"Please send the exact link: `{TARGET_LINK}`", parse_mode='Markdown')
+
+async def main():
+    app = Application.builder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
+    print("🤖 Bot starting...")
+    print("✅ Bot is ready!")
+    
+    await app.run_polling()
 
 if __name__ == "__main__":
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    print("Bot is running...")
-    app.run_polling()
+    asyncio.run(main())
