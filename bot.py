@@ -4,7 +4,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from playwright.sync_api import sync_playwright
 
 # Render ENV variable se token lo (secure)
-BOT_TOKEN = os.environ.get("8563186624:AAF-ib-iPgcWnVt6Fcgj7QsegGeUM57p3sc")
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
 
 def huntermods_bypass():
